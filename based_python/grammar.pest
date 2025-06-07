@@ -1,0 +1,76 @@
+// grammar.pest
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+// Ignore comments
+COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
+
+binary_operation = { expression ~ operators ~ expression }
+
+EqOp = { "==" | "!=" }
+CompOp = { "<" | ">" | "<=" | ">=" }
+AddOp = { "+" }
+SubOp = { "-" }
+MulOp = { "*" }
+DivOp = { "/" }
+
+operators = {
+    EqOp | CompOp | AddOp | SubOp | MulOp | DivOp
+}
+
+member_access = {
+    ident ~ ("." ~ ident)+
+}
+
+expression = {
+    member_access |
+    term ~ (
+        ( EqOp | CompOp | AddOp | SubOp | MulOp | DivOp ) ~ term
+    )*
+}
+
+
+term = {
+    string |
+    number |
+    ident |
+    paren_expression
+}
+
+binary_op = {  AddOp | SubOp | MulOp | DivOp  }
+
+KEYWORD_DEF = { "fn" }
+KEYWORD_IF = { "if" }
+KEYWORD_ELSE = { "else" }
+KEYWORD_FOR = { "for" }
+KEYWORD_WHILE = { "while" }
+KEYWORD_CLASS = { "class" }
+
+ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+dunder_ident = @{ "__" ~ ASCII_ALPHA+ ~ "__"? }
+
+number = @{ ASCII_DIGIT+ }
+string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" | "'" ~ (!"'" ~ ANY)* ~ "'" }
+
+// Expressions (simplified)
+
+paren_expression = { "(" ~ expression ~ ")" }
+arg_list = { "(" ~ (ident ~ ("," ~ ident)*)? ~ ")" }
+
+// Statements
+assignment_statement = { (ident | member_access) ~ "=" ~ expression ~ ";" }
+print_statement = { "print" ~ paren_expression ~ ";" }
+return_statement = { "return" ~ expression ~ ";" }
+
+block = { "{" ~ (statement)* ~ "}" }
+
+if_statement = { KEYWORD_IF ~ expression ~ block ~ (KEYWORD_ELSE ~ block)? }
+for_statement = { KEYWORD_FOR ~ expression ~ block }
+while_statement = { KEYWORD_WHILE ~ expression ~ block }
+function_def = { KEYWORD_DEF ~ (dunder_ident | ident) ~ arg_list ~ block }
+class_def = { KEYWORD_CLASS ~ ident ~ block }
+
+statement = { assignment_statement | print_statement | return_statement | if_statement | for_statement | while_statement | function_def | class_def }
+
+// The top-level rule for the entire file
+program = { SOI ~ (statement)* ~ EOI }

@@ -1,0 +1,24 @@
+# Based Python Comment
+fn greet(name) {
+    print("Hello, " + name + "!") ;
+    if name == "World" {
+                print("Special greeting!");
+    } else {
+    x = 10;
+    print("Not World. x is: " + x);
+    return x;
+    }
+}
+
+class MyClass {
+    fn __init__(self, value) {
+        self.value = value;
+    }
+
+    fn get_value(self) {
+        return self.value;
+    }
+}
+
+my_var = 123;
+greet("Amanda");
