@@ -28,6 +28,10 @@ pub enum Statement {
         args: Vec<String>,
         body: Block,
     },
+    FunctionCall {
+        name: String,
+        arguments: Vec<Expression>
+    },
     ClassDef {
         name: String,
         body: Block,
@@ -48,6 +52,27 @@ pub enum Expression {
         object: Box<Expression>,
         member: String,
     },
+    FunctionCall {
+        name: String,
+        args: Vec<Expression>,
+    },
+}
+
+#[derive(Debug)]
+pub enum Operator {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Eq,
+    NotEq,
+    Lt,
+    Gt,
+    LtEq,
+    GtEq,
+    And,
+    Or,
+    Not,
 }
 
 #[derive(Debug)]

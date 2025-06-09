@@ -42,6 +42,14 @@ fn generate_statement(statement: &Statement, indent_level: usize, output: &mut S
             output.push_str(&format!("{}def {}({}):\n", indent_str, name, args_str));
             generate_block(body, indent_level + 1, output);
         }
+        Statement::FunctionCall { name, arguments } => {
+            let args_str = arguments
+                .iter()
+                .map(generate_expression)
+                .collect::<Vec<_>>()
+                .join(", ");
+            output.push_str(&format!("{}{}({})\n", indent_str, name, args_str));
+        },
         Statement::ClassDef { name, body } => {
             output.push_str(&format!("{}class {}:\n", indent_str, name));
             generate_block(body, indent_level + 1, output);
@@ -54,8 +62,17 @@ fn generate_expression(expression: &Expression) -> String {
         Expression::Identifier(name) => name.clone(),
         Expression::Number(num) => num.to_string(),
         Expression::String(s) => format!("\"{}\"", s),
-        Expression::BinaryOp { .. } => todo!(),
-        Expression::MemberAccess { .. } => todo!()
+        Expression::BinaryOp { left, operator, right } => {
+            format!("{} {} {}",
+                    generate_expression(left),
+                    operator,
+                    generate_expression(right)
+            )
+        },
+        Expression::MemberAccess { object, member } => {
+            format!("{}.{}", generate_expression(object), member)
+        }
+        _ => {println!("Unknown expression: {:?}", expression); "UNKNOWN".to_string()}
     }
 }
 

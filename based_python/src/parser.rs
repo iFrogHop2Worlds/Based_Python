@@ -1,6 +1,6 @@
 use pest::Parser;
 use pest::iterators::{Pair, Pairs};
-use crate::ast::{Program, Statement, Expression, Block};
+use crate::ast::{Program, Statement, Expression, Block, Operator};
 use std::error::Error;
 use std::fmt;
 use pest_derive::Parser;
@@ -28,15 +28,18 @@ impl Error for BythonParseError {}
 lazy_static! {
     static ref PRATT_PARSER: PrattParser<Rule> = {
         PrattParser::new()
-            // Comparison operators
-            .op(Op::infix(Rule::expression, Assoc::Left))
-            // .op(Op::infix(Rule::CompOp, Assoc::Left))
-            // // Addition and subtraction
-            // .op(Op::infix(Rule::AddOp, Assoc::Left))
-            // .op(Op::infix(Rule::SubOp, Assoc::Left))
-            // // Multiplication and division
-            // .op(Op::infix(Rule::MulOp, Assoc::Left))
-            // .op(Op::infix(Rule::DivOp, Assoc::Left))
+            .op(Op::infix(Rule::eq, Assoc::Left))
+            .op(Op::infix(Rule::neq, Assoc::Left))
+            .op(Op::infix(Rule::gt, Assoc::Left))
+            .op(Op::infix(Rule::lt, Assoc::Left))
+            .op(Op::infix(Rule::gte, Assoc::Left))
+            .op(Op::infix(Rule::lte, Assoc::Left))
+
+            .op(Op::infix(Rule::add, Assoc::Left))
+            .op(Op::infix(Rule::subtract, Assoc::Left))
+
+            .op(Op::infix(Rule::multiply, Assoc::Left))
+            .op(Op::infix(Rule::divide, Assoc::Left))
     };
 }
 
@@ -87,9 +90,18 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
         }
         Rule::if_statement => {
             let mut inner = pair.into_inner();
+            inner.next();
             let condition = parse_expression(inner.next().unwrap())?;
             let consequence = parse_block(inner.next().unwrap())?;
-            let alternative = inner.next().map(|p| parse_block(p)).transpose()?;
+            let alternative = if let Some(else_token) = inner.next() {
+                if else_token.as_rule() == Rule::KEYWORD_ELSE {
+                    Some(parse_block(inner.next().unwrap())?)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             Ok(Statement::If {
                 condition,
                 consequence,
@@ -110,23 +122,72 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
         }
         Rule::function_def => {
             let mut inner = pair.into_inner();
-            let name = inner.next().unwrap().as_str().to_string();
+
+            inner.next();
+
+            let name_pair = inner.next().unwrap();
+            let name = match name_pair.as_rule() {
+                Rule::ident | Rule::dunder_ident => name_pair.as_str().to_string(),
+                _ => return Err(BythonParseError {
+                    message: format!("Expected function name, got {:?}", name_pair.as_rule())
+                })
+            };
+
             let mut args = Vec::new();
-            if let Some(arg_list_pair) = inner.next() {
+            let arg_list_pair = inner.next().unwrap();
+            if arg_list_pair.as_rule() == Rule::arg_list {
                 for arg_pair in arg_list_pair.into_inner() {
                     if arg_pair.as_rule() == Rule::ident {
                         args.push(arg_pair.as_str().to_string());
                     }
                 }
+            } else {
+                return Err(BythonParseError {
+                    message: format!("Expected argument list, got {:?}", arg_list_pair.as_rule())
+                });
             }
+
             let body = parse_block(inner.next().unwrap())?;
+
             Ok(Statement::FunctionDef { name, args, body })
         }
+        Rule::function_call => {
+            let mut inner = pair.into_inner();
+            let mut name = String::new();
+
+            let name_part = inner.next().unwrap();
+            match name_part.as_rule() {
+                Rule::ident => name = name_part.as_str().to_string(),
+                Rule::MemberAccess => {
+                    name = name_part.as_str().to_string();
+                },
+                _ => return Err(BythonParseError {
+                    message: format!("Unexpected rule for function name: {:?}", name_part.as_rule()),
+                })
+            }
+
+            let mut arguments = Vec::new();
+            for arg_list in inner {
+                if arg_list.as_rule() == Rule::ArgumentList {
+                    for arg in arg_list.into_inner() {
+                        arguments.push(parse_expression(arg)?);
+                    }
+                }
+            }
+
+            Ok(Statement::FunctionCall { name, arguments })
+        },
         Rule::class_def => {
             let mut inner = pair.into_inner();
             let name = inner.next().unwrap().as_str().to_string();
             let body = parse_block(inner.next().unwrap())?;
             Ok(Statement::ClassDef { name, body })
+        }
+        Rule::statement => {
+            let inner = pair.into_inner().next().ok_or_else(|| BythonParseError {
+                message: "Empty statement".to_string(),
+            })?;
+            parse_statement(inner)
         }
         _ => Err(BythonParseError {
             message: format!("Unexpected rule for statement: {:?}", pair.as_rule()),
@@ -136,19 +197,28 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
 
 fn parse_expression(pair: Pair<Rule>) -> Result<Expression, BythonParseError> {
     match pair.as_rule() {
-        Rule::member_access => {
+        Rule::MemberAccess => {
             let mut parts = pair.into_inner();
-            let first = parts.next().unwrap();
-            let mut expr = Expression::Identifier(first.as_str().to_string());
+            let object = Expression::Identifier(parts.next().unwrap().as_str().to_string());
+            let member = parts.next().unwrap().as_str().to_string();
 
-            for member in parts {
-                expr = Expression::MemberAccess {
-                    object: Box::new(expr),
-                    member: member.as_str().to_string(),
-                };
-            }
-            Ok(expr)
+            Ok(Expression::MemberAccess {
+                object: Box::new(object),
+                member
+            })
         },
+        Rule::BinOperation => {
+            let mut parts = pair.into_inner();
+            let left = parse_expression(parts.next().unwrap())?;
+            let operator = parts.next().unwrap().as_str().to_string();
+            let right = parse_expression(parts.next().unwrap())?;
+
+            Ok(Expression::BinaryOp {
+                left: Box::new(left),
+                operator,
+                right: Box::new(right),
+            })
+        }
         Rule::expression => {
             let pairs = pair.into_inner();
             Ok(PRATT_PARSER
@@ -182,6 +252,27 @@ fn parse_term(pair: Pair<Rule>) -> Result<Expression, BythonParseError> {
         _ => Err(BythonParseError {
             message: format!("Unexpected rule for term: {:?}", pair.as_rule()),
         }),
+    }
+}
+
+fn parse_operator(pair: Pair<Rule>) -> Result<Operator, BythonParseError> {
+    match pair.as_str() {
+        "+" => Ok(Operator::Add),
+        "-" => Ok(Operator::Sub),
+        "*" => Ok(Operator::Mul),
+        "/" => Ok(Operator::Div),
+        "==" => Ok(Operator::Eq),
+        "!=" => Ok(Operator::NotEq),
+        "<" => Ok(Operator::Lt),
+        ">" => Ok(Operator::Gt),
+        "<=" => Ok(Operator::LtEq),
+        ">=" => Ok(Operator::GtEq),
+        "and" => Ok(Operator::And),
+        "or" => Ok(Operator::Or),
+        "not" => Ok(Operator::Not),
+        _ => Err(BythonParseError {
+            message: format!("Unknown operator: {}", pair.as_str())
+        })
     }
 }
 

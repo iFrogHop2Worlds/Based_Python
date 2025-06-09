@@ -1,44 +1,54 @@
-// grammar.pest
-
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-
-// Ignore comments
 COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
+ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+dunder_ident = @{ "__" ~ ASCII_ALPHA+ ~ "__"? }
 
-binary_operation = { expression ~ operators ~ expression }
-
-EqOp = { "==" | "!=" }
-CompOp = { "<" | ">" | "<=" | ">=" }
-AddOp = { "+" }
-SubOp = { "-" }
-MulOp = { "*" }
-DivOp = { "/" }
-
-operators = {
-    EqOp | CompOp | AddOp | SubOp | MulOp | DivOp
+term = _{
+    number |
+    string |
+    ident |
+    "(" ~ expression ~ ")" |
+    function_call |
+    MemberAccess
 }
 
-member_access = {
-    ident ~ ("." ~ ident)+
+number = @{ int ~ ("." ~ ASCII_DIGIT*)? }
+int = @{ "-"? ~ ASCII_DIGIT+ }
+string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+
+MemberAccess = { ident ~ ("." ~ ident)+ }
+
+add = { "+" }
+subtract = { "-" }
+multiply = { "*" }
+divide = { "/" }
+eq = { "==" }
+neq = { "!=" }
+gt = { ">" }
+lt = { "<" }
+gte = { ">=" }
+lte = { "<=" }
+
+operator = _{
+    add | subtract | multiply | divide |
+    eq | neq | gt | lt | gte | lte |
+    "and" | "or" | "not"
 }
+
+// function_call = { ident ~ "(" ~ ArgumentList? ~ ")" ~ ";" }
+function_call = { ident ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" ~ ";" }
+ArgumentList = { expression ~ ("," ~ expression)* }
 
 expression = {
-    member_access |
-    term ~ (
-        ( EqOp | CompOp | AddOp | SubOp | MulOp | DivOp ) ~ term
-    )*
+    term ~ (operator ~ term)*
 }
+// expression = {
+//     (function_call | MemberAccess | term) ~ (operator ~ (function_call | MemberAccess | term))*
+// }
+paren_expression = { "(" ~ expression ~ ")" }
 
-
-term = {
-    string |
-    number |
-    ident |
-    paren_expression
-}
-
-binary_op = {  AddOp | SubOp | MulOp | DivOp  }
-
+binary_op = {   "+" | "-" | "*" | "/"   }
+BinOperation = { (function_call | MemberAccess | term) ~ operator ~ expression }
 KEYWORD_DEF = { "fn" }
 KEYWORD_IF = { "if" }
 KEYWORD_ELSE = { "else" }
@@ -46,31 +56,42 @@ KEYWORD_FOR = { "for" }
 KEYWORD_WHILE = { "while" }
 KEYWORD_CLASS = { "class" }
 
-ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
-dunder_ident = @{ "__" ~ ASCII_ALPHA+ ~ "__"? }
 
-number = @{ ASCII_DIGIT+ }
-string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" | "'" ~ (!"'" ~ ANY)* ~ "'" }
 
-// Expressions (simplified)
 
-paren_expression = { "(" ~ expression ~ ")" }
 arg_list = { "(" ~ (ident ~ ("," ~ ident)*)? ~ ")" }
 
-// Statements
-assignment_statement = { (ident | member_access) ~ "=" ~ expression ~ ";" }
-print_statement = { "print" ~ paren_expression ~ ";" }
+assignment_statement = { (ident | MemberAccess) ~ "=" ~ expression ~ ";" }
+print_statement = { "print" ~ "(" ~ expression ~ ")" ~ ";" }
 return_statement = { "return" ~ expression ~ ";" }
 
-block = { "{" ~ (statement)* ~ "}" }
+
 
 if_statement = { KEYWORD_IF ~ expression ~ block ~ (KEYWORD_ELSE ~ block)? }
 for_statement = { KEYWORD_FOR ~ expression ~ block }
 while_statement = { KEYWORD_WHILE ~ expression ~ block }
 function_def = { KEYWORD_DEF ~ (dunder_ident | ident) ~ arg_list ~ block }
+block = { "{" ~ (statement)* ~ "}" }
 class_def = { KEYWORD_CLASS ~ ident ~ block }
 
-statement = { assignment_statement | print_statement | return_statement | if_statement | for_statement | while_statement | function_def | class_def }
+basic_statement = _{
+    assignment_statement |
+    print_statement |
+    return_statement |
+    function_call
+}
 
-// The top-level rule for the entire file
+compound_statement = _{
+    if_statement |
+    for_statement |
+    while_statement |
+    function_def |
+    class_def
+}
+
+statement = {
+    basic_statement |
+    compound_statement
+}
+
 program = { SOI ~ (statement)* ~ EOI }
