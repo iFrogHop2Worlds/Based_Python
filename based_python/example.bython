@@ -14,3 +14,17 @@ w = "world";
 greet("Amanda");
 greet(w);
 
+class MyClass {
+    fn __init__(self, value) {
+        self.value = value;
+    }
+
+    fn get_value(self) {
+        return self.value;
+    }
+
+}
+
+obj = MyClass(69);
+value = obj.get_value();
+print("The value is: " + value);

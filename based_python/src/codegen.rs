@@ -43,8 +43,7 @@ fn generate_statement(statement: &Statement, indent_level: usize, output: &mut S
             generate_block(body, indent_level + 1, output);
         }
         Statement::FunctionCall { name, arguments } => {
-            let args_str = arguments
-                .iter()
+            let args_str = arguments.iter()
                 .map(generate_expression)
                 .collect::<Vec<_>>()
                 .join(", ");
@@ -63,15 +62,24 @@ fn generate_expression(expression: &Expression) -> String {
         Expression::Number(num) => num.to_string(),
         Expression::String(s) => format!("\"{}\"", s),
         Expression::BinaryOp { left, operator, right } => {
-            format!("{} {} {}",
-                    generate_expression(left),
-                    operator,
-                    generate_expression(right)
-            )
+            let left_str = generate_expression(left);
+            let right_str = generate_expression(right);
+            match operator.as_str() {
+                "+" => format!("{} + {}", left_str, right_str),
+                _ => format!("{} {} {}", left_str, operator, right_str)
+            }
         },
         Expression::MemberAccess { object, member } => {
             format!("{}.{}", generate_expression(object), member)
         }
+        Expression::FunctionCall { name, args } => {
+            let args_str = args.iter()
+                .map(generate_expression)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}({})", name, args_str)
+        }
+
         _ => {println!("Unknown expression: {:?}", expression); "UNKNOWN".to_string()}
     }
 }

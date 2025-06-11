@@ -71,10 +71,28 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
     match pair.as_rule() {
         Rule::assignment_statement => {
             let mut inner = pair.into_inner();
-            let name = inner.next().unwrap().as_str().to_string();
+            let target = inner.next().unwrap();
             let value_pair = inner.next().unwrap();
             let value = parse_expression(value_pair)?;
-            Ok(Statement::Assignment { name, value })
+
+            match target.as_rule() {
+                Rule::ident => Ok(Statement::Assignment {
+                    name: target.as_str().to_string(),
+                    value
+                }),
+                Rule::MemberAccess => {
+                    let mut parts = target.into_inner();
+                    let object = parts.next().unwrap().as_str().to_string();
+                    let member = parts.next().unwrap().as_str().to_string();
+                    Ok(Statement::Assignment {
+                        name: format!("{}.{}", object, member),
+                        value
+                    })
+                },
+                _ => Err(BythonParseError {
+                    message: format!("Invalid assignment target: {:?}", target.as_rule())
+                })
+            }
         }
         Rule::print_statement => {
             let mut inner = pair.into_inner();
@@ -135,7 +153,7 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
 
             let mut args = Vec::new();
             let arg_list_pair = inner.next().unwrap();
-            if arg_list_pair.as_rule() == Rule::arg_list {
+            if arg_list_pair.as_rule() == Rule::ParramsList {
                 for arg_pair in arg_list_pair.into_inner() {
                     if arg_pair.as_rule() == Rule::ident {
                         args.push(arg_pair.as_str().to_string());
@@ -168,7 +186,7 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
 
             let mut arguments = Vec::new();
             for arg_list in inner {
-                if arg_list.as_rule() == Rule::ArgumentList {
+                if arg_list.as_rule() == Rule::ParramsList {
                     for arg in arg_list.into_inner() {
                         arguments.push(parse_expression(arg)?);
                     }
@@ -235,6 +253,24 @@ fn parse_expression(pair: Pair<Rule>) -> Result<Expression, BythonParseError> {
                     }
                 })
                 .parse(pairs)?)
+        },
+        Rule::class_instantiation => {
+            let mut inner = pair.into_inner();
+            let class_name = inner.next().unwrap().as_str().to_string();
+            let mut arguments = Vec::new();
+
+            for arg_list in inner {
+                if arg_list.as_rule() == Rule::ParramsList {
+                    for arg in arg_list.into_inner() {
+                        arguments.push(parse_expression(arg)?);
+                    }
+                }
+            }
+
+            Ok(Expression::ClassInstantiation {
+                class_name,
+                arguments
+            })
         },
         _ => parse_term(pair),
     }

@@ -4,19 +4,20 @@ ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 dunder_ident = @{ "__" ~ ASCII_ALPHA+ ~ "__"? }
 
 term = _{
+    paren_expression |
+    function_call |
+    MemberAccess |
+    class_instantiation |
     number |
     string |
-    ident |
-    "(" ~ expression ~ ")" |
-    function_call |
-    MemberAccess
+    ident
 }
 
 number = @{ int ~ ("." ~ ASCII_DIGIT*)? }
 int = @{ "-"? ~ ASCII_DIGIT+ }
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
-MemberAccess = { ident ~ ("." ~ ident)+ }
+MemberAccess = { ident ~ ("." ~ ident)+ | ident ~ "." ~ ident }
 
 add = { "+" }
 subtract = { "-" }
@@ -35,16 +36,15 @@ operator = _{
     "and" | "or" | "not"
 }
 
-// function_call = { ident ~ "(" ~ ArgumentList? ~ ")" ~ ";" }
-function_call = { ident ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" ~ ";" }
-ArgumentList = { expression ~ ("," ~ expression)* }
+class_instantiation = { ident ~ "(" ~ term? ~ ")" ~ ";"}
+function_call = { ident ~ "(" ~ ParramsList? ~ ")" ~ ";"}
+ParramsList = { expression ~ ("," ~ expression)* }
 
 expression = {
-    term ~ (operator ~ term)*
+     (MemberAccess) ~ (operator ~ (MemberAccess | term))* |
+     term ~ (operator ~ (MemberAccess | term))*
 }
-// expression = {
-//     (function_call | MemberAccess | term) ~ (operator ~ (function_call | MemberAccess | term))*
-// }
+
 paren_expression = { "(" ~ expression ~ ")" }
 
 binary_op = {   "+" | "-" | "*" | "/"   }
@@ -56,21 +56,20 @@ KEYWORD_FOR = { "for" }
 KEYWORD_WHILE = { "while" }
 KEYWORD_CLASS = { "class" }
 
-
-
-
+//
 arg_list = { "(" ~ (ident ~ ("," ~ ident)*)? ~ ")" }
 
-assignment_statement = { (ident | MemberAccess) ~ "=" ~ expression ~ ";" }
-print_statement = { "print" ~ "(" ~ expression ~ ")" ~ ";" }
-return_statement = { "return" ~ expression ~ ";" }
+function_call_stmt = { (ident~"."~ function_call | function_call | class_instantiation) }
+assignment_statement = { (MemberAccess | ident) ~ "=" ~ (term ~ ";" | function_call_stmt ) }
+print_statement = { "print" ~ "(" ~ ParramsList ~ ")" ~ ";" }
+return_statement = { "return" ~  expression ~ ";" }
 
 
 
 if_statement = { KEYWORD_IF ~ expression ~ block ~ (KEYWORD_ELSE ~ block)? }
 for_statement = { KEYWORD_FOR ~ expression ~ block }
 while_statement = { KEYWORD_WHILE ~ expression ~ block }
-function_def = { KEYWORD_DEF ~ (dunder_ident | ident) ~ arg_list ~ block }
+function_def = { KEYWORD_DEF ~ (dunder_ident | ident) ~ (ParramsList | arg_list) ~ block }
 block = { "{" ~ (statement)* ~ "}" }
 class_def = { KEYWORD_CLASS ~ ident ~ block }
 
@@ -78,7 +77,8 @@ basic_statement = _{
     assignment_statement |
     print_statement |
     return_statement |
-    function_call
+    function_call |
+    function_call_stmt
 }
 
 compound_statement = _{

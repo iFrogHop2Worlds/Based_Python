@@ -56,6 +56,10 @@ pub enum Expression {
         name: String,
         args: Vec<Expression>,
     },
+    ClassInstantiation {
+        class_name: String,
+        arguments: Vec<Expression>
+    }
 }
 
 #[derive(Debug)]
