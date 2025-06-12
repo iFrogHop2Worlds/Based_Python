@@ -1,23 +1,23 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
+
 ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 dunder_ident = @{ "__" ~ ASCII_ALPHA+ ~ "__"? }
 
 term = _{
-    paren_expression |
-    function_call |
-    MemberAccess |
-    class_instantiation |
     number |
     string |
-    ident
+    ident |
+    paren_expression |
+    function_call |
+    function_call_stmt
 }
 
 number = @{ int ~ ("." ~ ASCII_DIGIT*)? }
 int = @{ "-"? ~ ASCII_DIGIT+ }
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
-MemberAccess = { ident ~ ("." ~ ident)+ | ident ~ "." ~ ident }
+member_access = { ident ~ ("." ~ ident)+ | ident ~ "." ~ ident }
 
 add = { "+" }
 subtract = { "-" }
@@ -36,19 +36,8 @@ operator = _{
     "and" | "or" | "not"
 }
 
-class_instantiation = { ident ~ "(" ~ term? ~ ")" ~ ";"}
-function_call = { ident ~ "(" ~ ParramsList? ~ ")" ~ ";"}
-ParramsList = { expression ~ ("," ~ expression)* }
-
-expression = {
-     (MemberAccess) ~ (operator ~ (MemberAccess | term))* |
-     term ~ (operator ~ (MemberAccess | term))*
-}
-
-paren_expression = { "(" ~ expression ~ ")" }
-
 binary_op = {   "+" | "-" | "*" | "/"   }
-BinOperation = { (function_call | MemberAccess | term) ~ operator ~ expression }
+BinOperation = { (member_access | term) ~ operator ~ expression }
 KEYWORD_DEF = { "fn" }
 KEYWORD_IF = { "if" }
 KEYWORD_ELSE = { "else" }
@@ -56,22 +45,40 @@ KEYWORD_FOR = { "for" }
 KEYWORD_WHILE = { "while" }
 KEYWORD_CLASS = { "class" }
 
-//
+block = { "{" ~ (statement)* ~ "}" }
+
+class_def = { KEYWORD_CLASS ~ ident ~ block }
+
+class_instantiation = { ident ~ "(" ~ term? ~ ")" ~ ";"}
+
+param_list = { expression ~ ("," ~ expression)* }
+
 arg_list = { "(" ~ (ident ~ ("," ~ ident)*)? ~ ")" }
 
+expression = {
+     (member_access) ~ (operator ~ (member_access | term))* |
+     term ~ (operator ~ (member_access | term))*
+}
+
+paren_expression = { "(" ~ expression ~ ")" }
+
+function_def = { KEYWORD_DEF ~ (dunder_ident | ident) ~ (param_list | arg_list) ~ block }
+
+function_call = { ident ~ "(" ~ param_list? ~ ")" ~ ";"}
+
 function_call_stmt = { (ident~"."~ function_call | function_call | class_instantiation) }
-assignment_statement = { (MemberAccess | ident) ~ "=" ~ (term ~ ";" | function_call_stmt ) }
-print_statement = { "print" ~ "(" ~ ParramsList ~ ")" ~ ";" }
+
 return_statement = { "return" ~  expression ~ ";" }
 
+assignment_statement = { (member_access | ident) ~ "=" ~ (term ~ ";" | function_call_stmt ) }
 
+print_statement = { "print" ~ "(" ~ param_list ~ ")" ~ ";" }
 
 if_statement = { KEYWORD_IF ~ expression ~ block ~ (KEYWORD_ELSE ~ block)? }
+
 for_statement = { KEYWORD_FOR ~ expression ~ block }
+
 while_statement = { KEYWORD_WHILE ~ expression ~ block }
-function_def = { KEYWORD_DEF ~ (dunder_ident | ident) ~ (ParramsList | arg_list) ~ block }
-block = { "{" ~ (statement)* ~ "}" }
-class_def = { KEYWORD_CLASS ~ ident ~ block }
 
 basic_statement = _{
     assignment_statement |

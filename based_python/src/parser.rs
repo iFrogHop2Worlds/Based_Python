@@ -73,14 +73,22 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
             let mut inner = pair.into_inner();
             let target = inner.next().unwrap();
             let value_pair = inner.next().unwrap();
-            let value = parse_expression(value_pair)?;
+            
+            let value = match value_pair.as_rule() {
+                Rule::function_call_stmt => {
+                    let func_call_inner = value_pair.into_inner().next().unwrap();
+                    parse_expression(func_call_inner)?
+                },
+                Rule::term => parse_expression(value_pair)?,
+                _ => parse_expression(value_pair)?
+            };
 
             match target.as_rule() {
                 Rule::ident => Ok(Statement::Assignment {
                     name: target.as_str().to_string(),
                     value
                 }),
-                Rule::MemberAccess => {
+                Rule::member_access => {
                     let mut parts = target.into_inner();
                     let object = parts.next().unwrap().as_str().to_string();
                     let member = parts.next().unwrap().as_str().to_string();
@@ -141,7 +149,7 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
         Rule::function_def => {
             let mut inner = pair.into_inner();
 
-            inner.next();
+            inner.next(); // Skip keyword
 
             let name_pair = inner.next().unwrap();
             let name = match name_pair.as_rule() {
@@ -153,16 +161,25 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
 
             let mut args = Vec::new();
             let arg_list_pair = inner.next().unwrap();
-            if arg_list_pair.as_rule() == Rule::ParramsList {
-                for arg_pair in arg_list_pair.into_inner() {
-                    if arg_pair.as_rule() == Rule::ident {
-                        args.push(arg_pair.as_str().to_string());
+            
+            match arg_list_pair.as_rule() {
+                Rule::arg_list => {
+                    for arg_pair in arg_list_pair.into_inner() {
+                        if arg_pair.as_rule() == Rule::ident {
+                            args.push(arg_pair.as_str().to_string());
+                        }
                     }
-                }
-            } else {
-                return Err(BythonParseError {
+                },
+                Rule::param_list => {
+                    for arg_pair in arg_list_pair.into_inner() {
+                        if arg_pair.as_rule() == Rule::ident {
+                            args.push(arg_pair.as_str().to_string());
+                        }
+                    }
+                },
+                _ => return Err(BythonParseError {
                     message: format!("Expected argument list, got {:?}", arg_list_pair.as_rule())
-                });
+                })
             }
 
             let body = parse_block(inner.next().unwrap())?;
@@ -176,7 +193,7 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
             let name_part = inner.next().unwrap();
             match name_part.as_rule() {
                 Rule::ident => name = name_part.as_str().to_string(),
-                Rule::MemberAccess => {
+                Rule::member_access => {
                     name = name_part.as_str().to_string();
                 },
                 _ => return Err(BythonParseError {
@@ -186,7 +203,7 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
 
             let mut arguments = Vec::new();
             for arg_list in inner {
-                if arg_list.as_rule() == Rule::ParramsList {
+                if arg_list.as_rule() == Rule::param_list {
                     for arg in arg_list.into_inner() {
                         arguments.push(parse_expression(arg)?);
                     }
@@ -195,8 +212,42 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
 
             Ok(Statement::FunctionCall { name, arguments })
         },
+        Rule::function_call_stmt => {
+            // Handle function call statements
+            let inner = pair.into_inner().next().unwrap();
+            match inner.as_rule() {
+                Rule::function_call => parse_statement(inner),
+                Rule::class_instantiation => {
+                    // Convert class instantiation to function call statement
+                    let mut class_inner = inner.into_inner();
+                    let class_name = class_inner.next().unwrap().as_str().to_string();
+                    let mut arguments = Vec::new();
+
+                    if let Some(arg_pair) = class_inner.next() {
+                        if arg_pair.as_rule() == Rule::term {
+                            arguments.push(parse_expression(arg_pair)?);
+                        }
+                    }
+
+                    Ok(Statement::FunctionCall { name: class_name, arguments })
+                },
+                _ => {
+                    // Handle member function calls (e.g., obj.method())
+                    let expr = parse_expression(inner.clone())?;
+                    match expr {
+                        Expression::FunctionCall { name, args } => {
+                            Ok(Statement::FunctionCall { name, arguments: args })
+                        },
+                        _ => Err(BythonParseError {
+                            message: format!("Expected function call in statement, got {:?}", inner.as_rule())
+                        })
+                    }
+                }
+            }
+        },
         Rule::class_def => {
             let mut inner = pair.into_inner();
+            inner.next();
             let name = inner.next().unwrap().as_str().to_string();
             let body = parse_block(inner.next().unwrap())?;
             Ok(Statement::ClassDef { name, body })
@@ -215,7 +266,7 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
 
 fn parse_expression(pair: Pair<Rule>) -> Result<Expression, BythonParseError> {
     match pair.as_rule() {
-        Rule::MemberAccess => {
+        Rule::member_access => {
             let mut parts = pair.into_inner();
             let object = Expression::Identifier(parts.next().unwrap().as_str().to_string());
             let member = parts.next().unwrap().as_str().to_string();
@@ -259,11 +310,9 @@ fn parse_expression(pair: Pair<Rule>) -> Result<Expression, BythonParseError> {
             let class_name = inner.next().unwrap().as_str().to_string();
             let mut arguments = Vec::new();
 
-            for arg_list in inner {
-                if arg_list.as_rule() == Rule::ParramsList {
-                    for arg in arg_list.into_inner() {
-                        arguments.push(parse_expression(arg)?);
-                    }
+            if let Some(arg_pair) = inner.next() {
+                if arg_pair.as_rule() == Rule::term {
+                    arguments.push(parse_expression(arg_pair)?);
                 }
             }
 
@@ -271,6 +320,49 @@ fn parse_expression(pair: Pair<Rule>) -> Result<Expression, BythonParseError> {
                 class_name,
                 arguments
             })
+        },
+        Rule::function_call => {
+            let mut inner = pair.into_inner();
+            let name = inner.next().unwrap().as_str().to_string();
+            let mut args = Vec::new();
+
+            for arg_list in inner {
+                if arg_list.as_rule() == Rule::param_list {
+                    for arg in arg_list.into_inner() {
+                        args.push(parse_expression(arg)?);
+                    }
+                }
+            }
+
+            Ok(Expression::FunctionCall { name, args })
+        },
+        Rule::function_call_stmt => {
+            let inner = pair.into_inner().next().unwrap();
+            match inner.as_rule() {
+                Rule::function_call => parse_expression(inner),
+                Rule::class_instantiation => parse_expression(inner),
+                _ => {
+                    let parts: Vec<&str> = inner.as_str().split('.').collect();
+                    if parts.len() == 2 {
+                        let obj_name = parts[0].to_string();
+                        let method_call = parts[1];
+                        
+                        if let Some(paren_pos) = method_call.find('(') {
+                            let method_name = method_call[..paren_pos].to_string();
+                            Ok(Expression::FunctionCall {
+                                name: format!("{}.{}", obj_name, method_name),
+                                args: vec![]
+                            })
+                        } else {
+                            Err(BythonParseError {
+                                message: "Invalid member function call".to_string()
+                            })
+                        }
+                    } else {
+                        parse_expression(inner)
+                    }
+                }
+            }
         },
         _ => parse_term(pair),
     }
@@ -285,6 +377,18 @@ fn parse_term(pair: Pair<Rule>) -> Result<Expression, BythonParseError> {
             Ok(Expression::String(s[1..s.len() - 1].to_string()))
         }
         Rule::paren_expression => parse_expression(pair.into_inner().next().unwrap()),
+        Rule::function_call => parse_expression(pair),
+        Rule::function_call_stmt => parse_expression(pair),
+        Rule::member_access => {
+            let mut parts = pair.into_inner();
+            let object = Expression::Identifier(parts.next().unwrap().as_str().to_string());
+            let member = parts.next().unwrap().as_str().to_string();
+
+            Ok(Expression::MemberAccess {
+                object: Box::new(object),
+                member
+            })
+        },
         _ => Err(BythonParseError {
             message: format!("Unexpected rule for term: {:?}", pair.as_rule()),
         }),
