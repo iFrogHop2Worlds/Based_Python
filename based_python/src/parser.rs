@@ -92,6 +92,7 @@ fn parse_statement(pair: Pair<Rule>) -> Result<Statement, BythonParseError> {
                     let mut parts = target.into_inner();
                     let object = parts.next().unwrap().as_str().to_string();
                     let member = parts.next().unwrap().as_str().to_string();
+                    println!("MemberAcess {:?}", member);
                     Ok(Statement::Assignment {
                         name: format!("{}.{}", object, member),
                         value
@@ -378,6 +379,21 @@ fn parse_term(pair: Pair<Rule>) -> Result<Expression, BythonParseError> {
         }
         Rule::paren_expression => parse_expression(pair.into_inner().next().unwrap()),
         Rule::function_call => parse_expression(pair),
+        Rule::function_call_term => {
+            let mut inner = pair.into_inner();
+            let name = inner.next().unwrap().as_str().to_string();
+            let mut args = Vec::new();
+
+            for arg_list in inner {
+                if arg_list.as_rule() == Rule::param_list {
+                    for arg in arg_list.into_inner() {
+                        args.push(parse_expression(arg)?);
+                    }
+                }
+            }
+
+            Ok(Expression::FunctionCall { name, args })
+        },
         Rule::function_call_stmt => parse_expression(pair),
         Rule::member_access => {
             let mut parts = pair.into_inner();

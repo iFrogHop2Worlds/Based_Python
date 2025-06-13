@@ -5,13 +5,13 @@ fn greet(name) {
         print("Special greeting!");
     } else {
         x = 10;
-        print("Not World. x is: " + x);
+        print("Not World. x is: " + str(x) );
         return x;
     }
 }
 
-w = "world";
-greet("Amanda");
+w = "World";
+
 greet(w);
 
 class MyClass {
@@ -25,6 +25,6 @@ class MyClass {
 
 }
 
-obj = MyClass(69);
-value = obj.get_value();
-print("The value is: " + value);
+mything = MyClass(69);
+value = mything.get_value(); //todo fix: .get_value(); is getting dropped hence value.value below.
+print("The value is: " + str(value.value) );
